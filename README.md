@@ -24,7 +24,7 @@ After all the prerequisites have met, we can execute the test cases. Since we ar
 > python -m pytest /<loaction of test file> --html=reports/report.html
 
 For e.g:
->python -m pytest tests/test_booking_simple_path.py -s --html=reports/report.html
+>python -m pytest tests/test_booking_simple_path.py --html=reports/report.html
 
 ### Execution Logs
 
