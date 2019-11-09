@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <meta charset="utf-8"/>
+    <title>Test Report</title>
+    <link href="assets/style.css" rel="stylesheet" type="text/css"/></head>
+  <body onLoad="init()">
+    <script>/* This Source Code Form is subject to the terms of the Mozilla Public
+ * License, v. 2.0. If a copy of the MPL was not distributed with this file,
+ * You can obtain one at http://mozilla.org/MPL/2.0/. */
+
+
+function toArray(iter) {
+    if (iter === null) {
+        return null;
+    }
+    return Array.prototype.slice.call(iter);
+}
+
+function find(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return elem.querySelector(selector);
+}
+
+function find_all(selector, elem) {
+    if (!elem) {
+        elem = document;
+    }
+    return toArray(elem.querySelectorAll(selector));
+}
+
+function sort_column(elem) {
+    toggle_sort_states(elem);
+    var colIndex = toArray(elem.parentNode.childNodes).indexOf(elem);
+    var key;
+    if (elem.classList.contains('numeric')) {
+        key = key_num;
+    } else if (elem.classList.contains('result')) {
+        key = key_result;
+    } else {
+        key = key_alpha;
+    }
+    sort_table(elem, key(colIndex));
+}
+
+function show_all_extras() {
+    find_all('.col-result').forEach(show_extras);
+}
+
+function hide_all_extras() {
+    find_all('.col-result').forEach(hide_extras);
+}
+
+function show_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.remove("collapsed");
+    expandcollapse.classList.remove("expander");
+    expandcollapse.classList.add("collapser");
+}
+
+function hide_extras(colresult_elem) {
+    var extras = colresult_elem.parentNode.nextElementSibling;
+    var expandcollapse = colresult_elem.firstElementChild;
+    extras.classList.add("collapsed");
+    expandcollapse.classList.remove("collapser");
+    expandcollapse.classList.add("expander");
+}
+
+function show_filters() {
+    var filter_items = document.getElementsByClassName('filter');
+    for (var i = 0; i < filter_items.length; i++)
+        filter_items[i].hidden = false;
+}
+
+function add_collapse() {
+    // Add links for show/hide all
+    var resulttable = find('table#results-table');
+    var showhideall = document.createElement("p");
+    showhideall.innerHTML = '<a href="javascript:show_all_extras()">Show all details</a> / ' +
+                            '<a href="javascript:hide_all_extras()">Hide all details</a>';
+    resulttable.parentElement.insertBefore(showhideall, resulttable);
+
+    // Add show/hide link to each result
+    find_all('.col-result').forEach(function(elem) {
+        var collapsed = get_query_parameter('collapsed') || 'Passed';
+        var extras = elem.parentNode.nextElementSibling;
+        var expandcollapse = document.createElement("span");
+        if (collapsed.includes(elem.innerHTML)) {
+            extras.classList.add("collapsed");
+            expandcollapse.classList.add("expander");
+        } else {
+            expandcollapse.classList.add("collapser");
+        }
+        elem.appendChild(expandcollapse);
+
+        elem.addEventListener("click", function(event) {
+            if (event.currentTarget.parentNode.nextElementSibling.classList.contains("collapsed")) {
+                show_extras(event.currentTarget);
+            } else {
+                hide_extras(event.currentTarget);
+            }
+        });
+    })
+}
+
+function get_query_parameter(name) {
+    var match = RegExp('[?&]' + name + '=([^&]*)').exec(window.location.search);
+    return match && decodeURIComponent(match[1].replace(/\+/g, ' '));
+}
+
+function init () {
+    reset_sort_headers();
+
+    add_collapse();
+
+    show_filters();
+
+    toggle_sort_states(find('.initial-sort'));
+
+    find_all('.sortable').forEach(function(elem) {
+        elem.addEventListener("click",
+                              function(event) {
+                                  sort_column(elem);
+                              }, false)
+    });
+
+};
+
+function sort_table(clicked, key_func) {
+    var rows = find_all('.results-table-row');
+    var reversed = !clicked.classList.contains('asc');
+    var sorted_rows = sort(rows, key_func, reversed);
+    /* Whole table is removed here because browsers acts much slower
+     * when appending existing elements.
+     */
+    var thead = document.getElementById("results-table-head");
+    document.getElementById('results-table').remove();
+    var parent = document.createElement("table");
+    parent.id = "results-table";
+    parent.appendChild(thead);
+    sorted_rows.forEach(function(elem) {
+        parent.appendChild(elem);
+    });
+    document.getElementsByTagName("BODY")[0].appendChild(parent);
+}
+
+function sort(items, key_func, reversed) {
+    var sort_array = items.map(function(item, i) {
+        return [key_func(item), i];
+    });
+
+    sort_array.sort(function(a, b) {
+        var key_a = a[0];
+        var key_b = b[0];
+
+        if (key_a == key_b) return 0;
+
+        if (reversed) {
+            return (key_a < key_b ? 1 : -1);
+        } else {
+            return (key_a > key_b ? 1 : -1);
+        }
+    });
+
+    return sort_array.map(function(item) {
+        var index = item[1];
+        return items[index];
+    });
+}
+
+function key_alpha(col_index) {
+    return function(elem) {
+        return elem.childNodes[1].childNodes[col_index].firstChild.data.toLowerCase();
+    };
+}
+
+function key_num(col_index) {
+    return function(elem) {
+        return parseFloat(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function key_result(col_index) {
+    return function(elem) {
+        var strings = ['Error', 'Failed', 'Rerun', 'XFailed', 'XPassed',
+                       'Skipped', 'Passed'];
+        return strings.indexOf(elem.childNodes[1].childNodes[col_index].firstChild.data);
+    };
+}
+
+function reset_sort_headers() {
+    find_all('.sort-icon').forEach(function(elem) {
+        elem.parentNode.removeChild(elem);
+    });
+    find_all('.sortable').forEach(function(elem) {
+        var icon = document.createElement("div");
+        icon.className = "sort-icon";
+        icon.textContent = "vvv";
+        elem.insertBefore(icon, elem.firstChild);
+        elem.classList.remove("desc", "active");
+        elem.classList.add("asc", "inactive");
+    });
+}
+
+function toggle_sort_states(elem) {
+    //if active, toggle between asc and desc
+    if (elem.classList.contains('active')) {
+        elem.classList.toggle('asc');
+        elem.classList.toggle('desc');
+    }
+
+    //if inactive, reset all other functions and add ascending active
+    if (elem.classList.contains('inactive')) {
+        reset_sort_headers();
+        elem.classList.remove('inactive');
+        elem.classList.add('active');
+    }
+}
+
+function is_all_rows_hidden(value) {
+  return value.hidden == false;
+}
+
+function filter_table(elem) {
+    var outcome_att = "data-test-result";
+    var outcome = elem.getAttribute(outcome_att);
+    class_outcome = outcome + " results-table-row";
+    var outcome_rows = document.getElementsByClassName(class_outcome);
+
+    for(var i = 0; i < outcome_rows.length; i++){
+        outcome_rows[i].hidden = !elem.checked;
+    }
+
+    var rows = find_all('.results-table-row').filter(is_all_rows_hidden);
+    var all_rows_hidden = rows.length == 0 ? true : false;
+    var not_found_message = document.getElementById("not-found-message");
+    not_found_message.hidden = !all_rows_hidden;
+}
+</script>
+    <h1>report.html</h1>
+    <p>Report generated on 09-Nov-2019 at 17:41:36 for <a href="https://www.dentira.com">Dentira</a> v2.0.0</p>
+    <h2>Environment</h2>
+    <table id="environment">
+      <tr>
+        <td>Packages</td>
+        <td>{&apos;pytest&apos;: &apos;3.7.2&apos;, &apos;py&apos;: &apos;1.8.0&apos;, &apos;pluggy&apos;: &apos;0.13.0&apos;}</td></tr>
+      <tr>
+        <td>Platform</td>
+        <td>Darwin-18.2.0-x86_64-i386-64bit</td></tr>
+      <tr>
+        <td>Plugins</td>
+        <td>{&apos;dependency&apos;: &apos;0.4.0&apos;, &apos;html&apos;: &apos;2.0.0&apos;, &apos;sourceorder&apos;: &apos;0.5.1&apos;, &apos;metadata&apos;: &apos;1.8.0&apos;}</td></tr>
+      <tr>
+        <td>Python</td>
+        <td>3.7.4</td></tr></table>
+    <h2>Summary</h2>
+    <p>1 tests ran in 33.45 seconds. </p>
+    <p class="filter" hidden="true">(Un)check the boxes to filter the results.</p><input checked="true" class="filter" data-test-result="passed" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="passed">1 passed</span>, <input checked="true" class="filter" data-test-result="skipped" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="skipped">0 skipped</span>, <input checked="true" class="filter" data-test-result="failed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="failed">0 failed</span>, <input checked="true" class="filter" data-test-result="error" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="error">0 errors</span>, <input checked="true" class="filter" data-test-result="xfailed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xfailed">0 expected failures</span>, <input checked="true" class="filter" data-test-result="xpassed" disabled="true" hidden="true" name="filter_checkbox" onChange="filter_table(this)" type="checkbox"/><span class="xpassed">0 unexpected passes</span>
+    <h2>Results</h2>
+    <table id="results-table">
+      <thead id="results-table-head">
+        <tr>
+          <th class="sortable result initial-sort" col="result">Result</th>
+          <th class="sortable" col="name">Test</th>
+          <th class="sortable numeric" col="duration">Duration</th>
+          <th>Links</th></tr>
+        <tr hidden="true" id="not-found-message">
+          <th colspan="4">No results found. Try to check the filters</th></tr></thead>
+      <tbody class="passed results-table-row">
+        <tr>
+          <td class="col-result">Passed</td>
+          <td class="col-name">tests/test_booking_simple_path.py::BookingTest::test_sample_booking</td>
+          <td class="col-duration">33.05</td>
+          <td class="col-links"></td></tr>
+        <tr>
+          <td class="extra" colspan="4">
+            <div class="log"> -------------------------------Captured log call-------------------------------- <br/>test_booking_simple_path.py   21 TRACE    CALL *() **{}
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session {&quot;capabilities&quot;: {&quot;firstMatch&quot;: [{}], &quot;alwaysMatch&quot;: {&quot;browserName&quot;: &quot;chrome&quot;, &quot;platformName&quot;: &quot;any&quot;, &quot;goog:chromeOptions&quot;: {&quot;extensions&quot;: [], &quot;args&quot;: []}}}, &quot;desiredCapabilities&quot;: {&quot;browserName&quot;: &quot;chrome&quot;, &quot;version&quot;: &quot;&quot;, &quot;platform&quot;: &quot;ANY&quot;, &quot;goog:chromeOptions&quot;: {&quot;extensions&quot;: [], &quot;args&quot;: []}}}
+connectionpool.py          208 DEBUG    Starting new HTTP connection (1): 127.0.0.1
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session HTTP/1.1&quot; 200 688
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/window/rect {&quot;x&quot;: null, &quot;y&quot;: null, &quot;width&quot;: 1440, &quot;height&quot;: 900}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/window/rect HTTP/1.1&quot; 200 51
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/timeouts {&quot;implicit&quot;: 20000}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/timeouts HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/timeouts {&quot;pageLoad&quot;: 20000}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/timeouts HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    DELETE http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/cookie {}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;DELETE /session/2250a6147ec68a1737817ec16e5b49aa/cookie HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+Homepage.py                 11 TRACE    CALL *() **{}
+ExperiencePage.py           21 TRACE    CALL *() **{}
+ExperiencePage.py           11 TRACE    CALL *() **{}
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/url {&quot;url&quot;: &quot;https://www.airbnb.co.in/&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/url HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/execute/sync {&quot;script&quot;: &quot;return document.readyState;&quot;, &quot;args&quot;: []}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/execute/sync HTTP/1.1&quot; 200 20
+remote_connection.py       440 DEBUG    Finished Request
+test_booking_simple_path.py   28 TRACE    RETURN None
+test_booking_simple_path.py   31 TRACE    CALL *() **{}
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//h1[@class=&#x27;_14i3z6h&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@class=&#x27;optanon-allow-all accept-cookies-button&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@class=&#x27;optanon-allow-all accept-cookies-button&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/86d38ac4-66ca-4da6-8751-2d983f8e610e/click {&quot;id&quot;: &quot;86d38ac4-66ca-4da6-8751-2d983f8e610e&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/86d38ac4-66ca-4da6-8751-2d983f8e610e/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//input[@id=&#x27;Koan-magic-carpet-koan-search-bar__input&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/8aee8da1-5232-4396-87c4-78e0f6add049/clear {&quot;id&quot;: &quot;8aee8da1-5232-4396-87c4-78e0f6add049&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/8aee8da1-5232-4396-87c4-78e0f6add049/clear HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/8aee8da1-5232-4396-87c4-78e0f6add049/value {&quot;text&quot;: &quot;Sicily, Italy&quot;, &quot;value&quot;: [&quot;S&quot;, &quot;i&quot;, &quot;c&quot;, &quot;i&quot;, &quot;l&quot;, &quot;y&quot;, &quot;,&quot;, &quot; &quot;, &quot;I&quot;, &quot;t&quot;, &quot;a&quot;, &quot;l&quot;, &quot;y&quot;], &quot;id&quot;: &quot;8aee8da1-5232-4396-87c4-78e0f6add049&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/8aee8da1-5232-4396-87c4-78e0f6add049/value HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//li[@id=&#x27;Koan-magic-carpet-koan-search-bar__option-0&#x27;]//div[@class=&#x27;_121z06r2&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//li[@id=&#x27;Koan-magic-carpet-koan-search-bar__option-0&#x27;]//div[@class=&#x27;_121z06r2&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/ac1a833b-fe86-48e0-abbc-acfc7da743f2/click {&quot;id&quot;: &quot;ac1a833b-fe86-48e0-abbc-acfc7da743f2&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/ac1a833b-fe86-48e0-abbc-acfc7da743f2/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//td[contains(@aria-label, \&quot;November 19, 2019\&quot;)]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/bc899bf8-715a-4e5f-a1f4-1fce2460d761/click {&quot;id&quot;: &quot;bc899bf8-715a-4e5f-a1f4-1fce2460d761&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/bc899bf8-715a-4e5f-a1f4-1fce2460d761/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@class=&#x27;_1h5uiygl&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/a5ba5acb-2cec-49b9-9b7b-22563af5b30a/click {&quot;id&quot;: &quot;a5ba5acb-2cec-49b9-9b7b-22563af5b30a&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/a5ba5acb-2cec-49b9-9b7b-22563af5b30a/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@class=&#x27;_1h5uiygl&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/a5ba5acb-2cec-49b9-9b7b-22563af5b30a/click {&quot;id&quot;: &quot;a5ba5acb-2cec-49b9-9b7b-22563af5b30a&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/a5ba5acb-2cec-49b9-9b7b-22563af5b30a/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@class=&#x27;_1h5uiygl&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/a5ba5acb-2cec-49b9-9b7b-22563af5b30a/click {&quot;id&quot;: &quot;a5ba5acb-2cec-49b9-9b7b-22563af5b30a&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/a5ba5acb-2cec-49b9-9b7b-22563af5b30a/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//td[contains(@aria-label, \&quot;February 17, 2020\&quot;)]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/2d874269-efe3-4d65-8eda-af22734cc752/click {&quot;id&quot;: &quot;2d874269-efe3-4d65-8eda-af22734cc752&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/2d874269-efe3-4d65-8eda-af22734cc752/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/elements {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//*[contains(text(), \&quot;Guests\&quot;)]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/elements HTTP/1.1&quot; 200 169
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/9d35b6ec-bf48-44a3-a850-a67c3a2d8664/click {&quot;id&quot;: &quot;9d35b6ec-bf48-44a3-a850-a67c3a2d8664&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/9d35b6ec-bf48-44a3-a850-a67c3a2d8664/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/timeouts {&quot;implicit&quot;: 3000}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/timeouts HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@class=&#x27;_9cfq872&#x27;]//div//div[1]//div[1]//div[1]//div[1]//div[2]//div[1]//div[3]//button[1]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/56f04589-dc75-4964-a643-af6ec653ace5/click {&quot;id&quot;: &quot;56f04589-dc75-4964-a643-af6ec653ace5&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/56f04589-dc75-4964-a643-af6ec653ace5/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@class=&#x27;_e296pg&#x27;]//div[2]//div[1]//div[1]//div[1]//div[2]//div[1]//div[3]//button[1]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/91bedfa6-1e19-41ad-af29-04ffbbc22d7f/click {&quot;id&quot;: &quot;91bedfa6-1e19-41ad-af29-04ffbbc22d7f&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/91bedfa6-1e19-41ad-af29-04ffbbc22d7f/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@class=&#x27;_b0ybw8s&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/7802079f-7a33-4292-b11c-29c08080cdcc/click {&quot;id&quot;: &quot;7802079f-7a33-4292-b11c-29c08080cdcc&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/7802079f-7a33-4292-b11c-29c08080cdcc/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@class=&#x27;_1vs0x720&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@class=&#x27;_1vs0x720&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/dd1f3452-97f2-451f-ba1b-549e01f5b208/click {&quot;id&quot;: &quot;dd1f3452-97f2-451f-ba1b-549e01f5b208&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/dd1f3452-97f2-451f-ba1b-549e01f5b208/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/execute/sync {&quot;script&quot;: &quot;return document.readyState;&quot;, &quot;args&quot;: []}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/execute/sync HTTP/1.1&quot; 200 20
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    GET http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/title {}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;GET /session/2250a6147ec68a1737817ec16e5b49aa/title HTTP/1.1&quot; 200 37
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    GET http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/title {}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;GET /session/2250a6147ec68a1737817ec16e5b49aa/title HTTP/1.1&quot; 200 37
+remote_connection.py       440 DEBUG    Finished Request
+commonFunctionsUI.py       180 INFO     
+Expected title : Sicily · Stays · Airbnb
+ Actual Title : Sicily · Stays · Airbnb
+
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@id=&#x27;menuItemButton-price_range&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 404 1972
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//*[@id=&#x27;menuItemButton-price_range&#x27;]/button&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/525310f0-2dc9-43c9-9dae-aee507054d7f/click {&quot;id&quot;: &quot;525310f0-2dc9-43c9-9dae-aee507054d7f&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/525310f0-2dc9-43c9-9dae-aee507054d7f/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//button[@id=&#x27;menuItemButton-price_range&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 404 1972
+remote_connection.py       440 DEBUG    Finished Request
+test_booking_simple_path.py   58 ERROR    Could not select Price
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@itemprop=&#x27;itemListElement&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element HTTP/1.1&quot; 200 88
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/execute/sync {&quot;script&quot;: &quot;return (function(){return function(){var k=this;function l(a){return void 0!==a}function m(a){return\&quot;string\&quot;==typeof a}function aa(a,b){a=a.split(\&quot;.\&quot;);var c=k;a[0]in c||!c.execScript||c.execScript(\&quot;var \&quot;+a[0]);for(var d;a.length&amp;&amp;(d=a.shift());)!a.length&amp;&amp;l(b)?c[d]=b:c[d]&amp;&amp;c[d]!==Object.prototype[d]?c=c[d]:c=c[d]={}}\nfunction ba(a){var b=typeof a;if(\&quot;object\&quot;==b)if(a){if(a instanceof Array)return\&quot;array\&quot;;if(a instanceof Object)return b;var c=Object.prototype.toString.call(a);if(\&quot;[object Window]\&quot;==c)return\&quot;object\&quot;;if(\&quot;[object Array]\&quot;==c||\&quot;number\&quot;==typeof a.length&amp;&amp;\&quot;undefined\&quot;!=typeof a.splice&amp;&amp;\&quot;undefined\&quot;!=typeof a.propertyIsEnumerable&amp;&amp;!a.propertyIsEnumerable(\&quot;splice\&quot;))return\&quot;array\&quot;;if(\&quot;[object Function]\&quot;==c||\&quot;undefined\&quot;!=typeof a.call&amp;&amp;\&quot;undefined\&quot;!=typeof a.propertyIsEnumerable&amp;&amp;!a.propertyIsEnumerable(\&quot;call\&quot;))return\&quot;function\&quot;}else return\&quot;null\&quot;;\nelse if(\&quot;function\&quot;==b&amp;&amp;\&quot;undefined\&quot;==typeof a.call)return\&quot;object\&quot;;return b}function ca(a,b,c){return a.call.apply(a.bind,arguments)}function da(a,b,c){if(!a)throw Error();if(2&lt;arguments.length){var d=Array.prototype.slice.call(arguments,2);return function(){var c=Array.prototype.slice.call(arguments);Array.prototype.unshift.apply(c,d);return a.apply(b,c)}}return function(){return a.apply(b,arguments)}}\nfunction ea(a,b,c){Function.prototype.bind&amp;&amp;-1!=Function.prototype.bind.toString().indexOf(\&quot;native code\&quot;)?ea=ca:ea=da;return ea.apply(null,arguments)}function fa(a,b){var c=Array.prototype.slice.call(arguments,1);return function(){var b=c.slice();b.push.apply(b,arguments);return a.apply(this,b)}}\nfunction p(a,b){function c(){}c.prototype=b.prototype;a.L=b.prototype;a.prototype=new c;a.prototype.constructor=a;a.K=function(a,c,f){for(var d=Array(arguments.length-2),e=2;e&lt;arguments.length;e++)d[e-2]=arguments[e];return b.prototype[c].apply(a,d)}};function ga(a,b){this.code=a;this.a=q[a]||ha;this.message=b||\&quot;\&quot;;a=this.a.replace(/((?:^|\\s+)[a-z])/g,function(a){return a.toUpperCase().replace(/^[\\s\\xa0]+/g,\&quot;\&quot;)});b=a.length-5;if(0&gt;b||a.indexOf(\&quot;Error\&quot;,b)!=b)a+=\&quot;Error\&quot;;this.name=a;a=Error(this.message);a.name=this.name;this.stack=a.stack||\&quot;\&quot;}p(ga,Error);var ha=\&quot;unknown error\&quot;,q={15:\&quot;element not selectable\&quot;,11:\&quot;element not visible\&quot;};q[31]=ha;q[30]=ha;q[24]=\&quot;invalid cookie domain\&quot;;q[29]=\&quot;invalid element coordinates\&quot;;q[12]=\&quot;invalid element state\&quot;;\nq[32]=\&quot;invalid selector\&quot;;q[51]=\&quot;invalid selector\&quot;;q[52]=\&quot;invalid selector\&quot;;q[17]=\&quot;javascript error\&quot;;q[405]=\&quot;unsupported operation\&quot;;q[34]=\&quot;move target out of bounds\&quot;;q[27]=\&quot;no such alert\&quot;;q[7]=\&quot;no such element\&quot;;q[8]=\&quot;no such frame\&quot;;q[23]=\&quot;no such window\&quot;;q[28]=\&quot;script timeout\&quot;;q[33]=\&quot;session not created\&quot;;q[10]=\&quot;stale element reference\&quot;;q[21]=\&quot;timeout\&quot;;q[25]=\&quot;unable to set cookie\&quot;;q[26]=\&quot;unexpected alert open\&quot;;q[13]=ha;q[9]=\&quot;unknown command\&quot;;ga.prototype.toString=function(){return this.name+\&quot;: \&quot;+this.message};var ia={aliceblue:\&quot;#f0f8ff\&quot;,antiquewhite:\&quot;#faebd7\&quot;,aqua:\&quot;#00ffff\&quot;,aquamarine:\&quot;#7fffd4\&quot;,azure:\&quot;#f0ffff\&quot;,beige:\&quot;#f5f5dc\&quot;,bisque:\&quot;#ffe4c4\&quot;,black:\&quot;#000000\&quot;,blanchedalmond:\&quot;#ffebcd\&quot;,blue:\&quot;#0000ff\&quot;,blueviolet:\&quot;#8a2be2\&quot;,brown:\&quot;#a52a2a\&quot;,burlywood:\&quot;#deb887\&quot;,cadetblue:\&quot;#5f9ea0\&quot;,chartreuse:\&quot;#7fff00\&quot;,chocolate:\&quot;#d2691e\&quot;,coral:\&quot;#ff7f50\&quot;,cornflowerblue:\&quot;#6495ed\&quot;,cornsilk:\&quot;#fff8dc\&quot;,crimson:\&quot;#dc143c\&quot;,cyan:\&quot;#00ffff\&quot;,darkblue:\&quot;#00008b\&quot;,darkcyan:\&quot;#008b8b\&quot;,darkgoldenrod:\&quot;#b8860b\&quot;,darkgray:\&quot;#a9a9a9\&quot;,darkgreen:\&quot;#006400\&quot;,\ndarkgrey:\&quot;#a9a9a9\&quot;,darkkhaki:\&quot;#bdb76b\&quot;,darkmagenta:\&quot;#8b008b\&quot;,darkolivegreen:\&quot;#556b2f\&quot;,darkorange:\&quot;#ff8c00\&quot;,darkorchid:\&quot;#9932cc\&quot;,darkred:\&quot;#8b0000\&quot;,darksalmon:\&quot;#e9967a\&quot;,darkseagreen:\&quot;#8fbc8f\&quot;,darkslateblue:\&quot;#483d8b\&quot;,darkslategray:\&quot;#2f4f4f\&quot;,darkslategrey:\&quot;#2f4f4f\&quot;,darkturquoise:\&quot;#00ced1\&quot;,darkviolet:\&quot;#9400d3\&quot;,deeppink:\&quot;#ff1493\&quot;,deepskyblue:\&quot;#00bfff\&quot;,dimgray:\&quot;#696969\&quot;,dimgrey:\&quot;#696969\&quot;,dodgerblue:\&quot;#1e90ff\&quot;,firebrick:\&quot;#b22222\&quot;,floralwhite:\&quot;#fffaf0\&quot;,forestgreen:\&quot;#228b22\&quot;,fuchsia:\&quot;#ff00ff\&quot;,gainsboro:\&quot;#dcdcdc\&quot;,\nghostwhite:\&quot;#f8f8ff\&quot;,gold:\&quot;#ffd700\&quot;,goldenrod:\&quot;#daa520\&quot;,gray:\&quot;#808080\&quot;,green:\&quot;#008000\&quot;,greenyellow:\&quot;#adff2f\&quot;,grey:\&quot;#808080\&quot;,honeydew:\&quot;#f0fff0\&quot;,hotpink:\&quot;#ff69b4\&quot;,indianred:\&quot;#cd5c5c\&quot;,indigo:\&quot;#4b0082\&quot;,ivory:\&quot;#fffff0\&quot;,khaki:\&quot;#f0e68c\&quot;,lavender:\&quot;#e6e6fa\&quot;,lavenderblush:\&quot;#fff0f5\&quot;,lawngreen:\&quot;#7cfc00\&quot;,lemonchiffon:\&quot;#fffacd\&quot;,lightblue:\&quot;#add8e6\&quot;,lightcoral:\&quot;#f08080\&quot;,lightcyan:\&quot;#e0ffff\&quot;,lightgoldenrodyellow:\&quot;#fafad2\&quot;,lightgray:\&quot;#d3d3d3\&quot;,lightgreen:\&quot;#90ee90\&quot;,lightgrey:\&quot;#d3d3d3\&quot;,lightpink:\&quot;#ffb6c1\&quot;,lightsalmon:\&quot;#ffa07a\&quot;,\nlightseagreen:\&quot;#20b2aa\&quot;,lightskyblue:\&quot;#87cefa\&quot;,lightslategray:\&quot;#778899\&quot;,lightslategrey:\&quot;#778899\&quot;,lightsteelblue:\&quot;#b0c4de\&quot;,lightyellow:\&quot;#ffffe0\&quot;,lime:\&quot;#00ff00\&quot;,limegreen:\&quot;#32cd32\&quot;,linen:\&quot;#faf0e6\&quot;,magenta:\&quot;#ff00ff\&quot;,maroon:\&quot;#800000\&quot;,mediumaquamarine:\&quot;#66cdaa\&quot;,mediumblue:\&quot;#0000cd\&quot;,mediumorchid:\&quot;#ba55d3\&quot;,mediumpurple:\&quot;#9370db\&quot;,mediumseagreen:\&quot;#3cb371\&quot;,mediumslateblue:\&quot;#7b68ee\&quot;,mediumspringgreen:\&quot;#00fa9a\&quot;,mediumturquoise:\&quot;#48d1cc\&quot;,mediumvioletred:\&quot;#c71585\&quot;,midnightblue:\&quot;#191970\&quot;,mintcream:\&quot;#f5fffa\&quot;,mistyrose:\&quot;#ffe4e1\&quot;,\nmoccasin:\&quot;#ffe4b5\&quot;,navajowhite:\&quot;#ffdead\&quot;,navy:\&quot;#000080\&quot;,oldlace:\&quot;#fdf5e6\&quot;,olive:\&quot;#808000\&quot;,olivedrab:\&quot;#6b8e23\&quot;,orange:\&quot;#ffa500\&quot;,orangered:\&quot;#ff4500\&quot;,orchid:\&quot;#da70d6\&quot;,palegoldenrod:\&quot;#eee8aa\&quot;,palegreen:\&quot;#98fb98\&quot;,paleturquoise:\&quot;#afeeee\&quot;,palevioletred:\&quot;#db7093\&quot;,papayawhip:\&quot;#ffefd5\&quot;,peachpuff:\&quot;#ffdab9\&quot;,peru:\&quot;#cd853f\&quot;,pink:\&quot;#ffc0cb\&quot;,plum:\&quot;#dda0dd\&quot;,powderblue:\&quot;#b0e0e6\&quot;,purple:\&quot;#800080\&quot;,red:\&quot;#ff0000\&quot;,rosybrown:\&quot;#bc8f8f\&quot;,royalblue:\&quot;#4169e1\&quot;,saddlebrown:\&quot;#8b4513\&quot;,salmon:\&quot;#fa8072\&quot;,sandybrown:\&quot;#f4a460\&quot;,seagreen:\&quot;#2e8b57\&quot;,\nseashell:\&quot;#fff5ee\&quot;,sienna:\&quot;#a0522d\&quot;,silver:\&quot;#c0c0c0\&quot;,skyblue:\&quot;#87ceeb\&quot;,slateblue:\&quot;#6a5acd\&quot;,slategray:\&quot;#708090\&quot;,slategrey:\&quot;#708090\&quot;,snow:\&quot;#fffafa\&quot;,springgreen:\&quot;#00ff7f\&quot;,steelblue:\&quot;#4682b4\&quot;,tan:\&quot;#d2b48c\&quot;,teal:\&quot;#008080\&quot;,thistle:\&quot;#d8bfd8\&quot;,tomato:\&quot;#ff6347\&quot;,turquoise:\&quot;#40e0d0\&quot;,violet:\&quot;#ee82ee\&quot;,wheat:\&quot;#f5deb3\&quot;,white:\&quot;#ffffff\&quot;,whitesmoke:\&quot;#f5f5f5\&quot;,yellow:\&quot;#ffff00\&quot;,yellowgreen:\&quot;#9acd32\&quot;};function ja(a,b){this.width=a;this.height=b}ja.prototype.toString=function(){return\&quot;(\&quot;+this.width+\&quot; x \&quot;+this.height+\&quot;)\&quot;};ja.prototype.ceil=function(){this.width=Math.ceil(this.width);this.height=Math.ceil(this.height);return this};ja.prototype.floor=function(){this.width=Math.floor(this.width);this.height=Math.floor(this.height);return this};ja.prototype.round=function(){this.width=Math.round(this.width);this.height=Math.round(this.height);return this};function ka(a,b){var c=la;return Object.prototype.hasOwnProperty.call(c,a)?c[a]:c[a]=b(a)};var ma=String.prototype.trim?function(a){return a.trim()}:function(a){return a.replace(/^[\\s\\xa0]+|[\\s\\xa0]+$/g,\&quot;\&quot;)};function na(a,b){return a&lt;b?-1:a&gt;b?1:0}function oa(a){return String(a).replace(/\\-([a-z])/g,function(a,c){return c.toUpperCase()})};/*\n\n The MIT License\n\n Copyright (c) 2007 Cybozu Labs, Inc.\n Copyright (c) 2012 Google Inc.\n\n Permission is hereby granted, free of charge, to any person obtaining a copy\n of this software and associated documentation files (the \&quot;Software\&quot;), to\n deal in the Software without restriction, including without limitation the\n rights to use, copy, modify, merge, publish, distribute, sublicense, and/or\n sell copies of the Software, and to permit persons to whom the Software is\n furnished to do so, subject to the following conditions:\n\n The above copyright notice and this permission notice shall be included in\n all copies or substantial portions of the Software.\n\n THE SOFTWARE IS PROVIDED \&quot;AS IS\&quot;, WITHOUT WARRANTY OF ANY KIND, EXPRESS OR\n IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,\n FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE\n AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER\n LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING\n FROM, OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS\n IN THE SOFTWARE.\n*/\nfunction pa(a,b,c){this.a=a;this.b=b||1;this.f=c||1};function qa(a){this.b=a;this.a=0}function ra(a){a=a.match(sa);for(var b=0;b&lt;a.length;b++)ta.test(a[b])&amp;&amp;a.splice(b,1);return new qa(a)}var sa=/\\$?(?:(?![0-9-\\.])(?:\\*|[\\w-\\.]+):)?(?![0-9-\\.])(?:\\*|[\\w-\\.]+)|\\/\\/|\\.\\.|::|\\d+(?:\\.\\d*)?|\\.\\d+|\&quot;[^\&quot;]*\&quot;|&#x27;[^&#x27;]*&#x27;|[!&lt;&gt;]=|\\s+|./g,ta=/^\\s/;function t(a,b){return a.b[a.a+(b||0)]}function u(a){return a.b[a.a++]}function ua(a){return a.b.length&lt;=a.a};var v;a:{var va=k.navigator;if(va){var wa=va.userAgent;if(wa){v=wa;break a}}v=\&quot;\&quot;}function x(a){return-1!=v.indexOf(a)};function y(a,b){this.h=a;this.c=l(b)?b:null;this.b=null;switch(a){case \&quot;comment\&quot;:this.b=8;break;case \&quot;text\&quot;:this.b=3;break;case \&quot;processing-instruction\&quot;:this.b=7;break;case \&quot;node\&quot;:break;default:throw Error(\&quot;Unexpected argument\&quot;);}}function xa(a){return\&quot;comment\&quot;==a||\&quot;text\&quot;==a||\&quot;processing-instruction\&quot;==a||\&quot;node\&quot;==a}y.prototype.a=function(a){return null===this.b||this.b==a.nodeType};y.prototype.f=function(){return this.h};\ny.prototype.toString=function(){var a=\&quot;Kind Test: \&quot;+this.h;null===this.c||(a+=z(this.c));return a};function ya(a,b){this.j=a.toLowerCase();a=\&quot;*\&quot;==this.j?\&quot;*\&quot;:\&quot;http://www.w3.org/1999/xhtml\&quot;;this.c=b?b.toLowerCase():a}ya.prototype.a=function(a){var b=a.nodeType;if(1!=b&amp;&amp;2!=b)return!1;b=l(a.localName)?a.localName:a.nodeName;return\&quot;*\&quot;!=this.j&amp;&amp;this.j!=b.toLowerCase()?!1:\&quot;*\&quot;==this.c?!0:this.c==(a.namespaceURI?a.namespaceURI.toLowerCase():\&quot;http://www.w3.org/1999/xhtml\&quot;)};ya.prototype.f=function(){return this.j};\nya.prototype.toString=function(){return\&quot;Name Test: \&quot;+(\&quot;http://www.w3.org/1999/xhtml\&quot;==this.c?\&quot;\&quot;:this.c+\&quot;:\&quot;)+this.j};function za(a){switch(a.nodeType){case 1:return fa(Aa,a);case 9:return za(a.documentElement);case 11:case 10:case 6:case 12:return Ba;default:return a.parentNode?za(a.parentNode):Ba}}function Ba(){return null}function Aa(a,b){if(a.prefix==b)return a.namespaceURI||\&quot;http://www.w3.org/1999/xhtml\&quot;;var c=a.getAttributeNode(\&quot;xmlns:\&quot;+b);return c&amp;&amp;c.specified?c.value||null:a.parentNode&amp;&amp;9!=a.parentNode.nodeType?Aa(a.parentNode,b):null};function Ca(a,b){if(m(a))return m(b)&amp;&amp;1==b.length?a.indexOf(b,0):-1;for(var c=0;c&lt;a.length;c++)if(c in a&amp;&amp;a[c]===b)return c;return-1}function A(a,b){for(var c=a.length,d=m(a)?a.split(\&quot;\&quot;):a,e=0;e&lt;c;e++)e in d&amp;&amp;b.call(void 0,d[e],e,a)}function Da(a,b){for(var c=a.length,d=[],e=0,f=m(a)?a.split(\&quot;\&quot;):a,g=0;g&lt;c;g++)if(g in f){var h=f[g];b.call(void 0,h,g,a)&amp;&amp;(d[e++]=h)}return d}function Ea(a,b,c){var d=c;A(a,function(c,f){d=b.call(void 0,d,c,f,a)});return d}\nfunction Fa(a,b){for(var c=a.length,d=m(a)?a.split(\&quot;\&quot;):a,e=0;e&lt;c;e++)if(e in d&amp;&amp;b.call(void 0,d[e],e,a))return!0;return!1}function Ga(a,b){for(var c=a.length,d=m(a)?a.split(\&quot;\&quot;):a,e=0;e&lt;c;e++)if(e in d&amp;&amp;!b.call(void 0,d[e],e,a))return!1;return!0}function Ha(a,b){a:{for(var c=a.length,d=m(a)?a.split(\&quot;\&quot;):a,e=0;e&lt;c;e++)if(e in d&amp;&amp;b.call(void 0,d[e],e,a)){b=e;break a}b=-1}return 0&gt;b?null:m(a)?a.charAt(b):a[b]}function Ia(a){return Array.prototype.concat.apply([],arguments)}\nfunction Ja(a,b,c){return 2&gt;=arguments.length?Array.prototype.slice.call(a,b):Array.prototype.slice.call(a,b,c)};function Ka(){return x(\&quot;iPhone\&quot;)&amp;&amp;!x(\&quot;iPod\&quot;)&amp;&amp;!x(\&quot;iPad\&quot;)};var La=\&quot;backgroundColor borderTopColor borderRightColor borderBottomColor borderLeftColor color outlineColor\&quot;.split(\&quot; \&quot;),Ma=/#([0-9a-fA-F])([0-9a-fA-F])([0-9a-fA-F])/,Na=/^#(?:[0-9a-f]{3}){1,2}$/i,Oa=/^(?:rgba)?\\((\\d{1,3}),\\s?(\\d{1,3}),\\s?(\\d{1,3}),\\s?(0|1|0\\.\\d*)\\)$/i,Pa=/^(?:rgb)?\\((0|[1-9]\\d{0,2}),\\s?(0|[1-9]\\d{0,2}),\\s?(0|[1-9]\\d{0,2})\\)$/i;function Qa(){return(x(\&quot;Chrome\&quot;)||x(\&quot;CriOS\&quot;))&amp;&amp;!x(\&quot;Edge\&quot;)};function Ra(a,b){this.x=l(a)?a:0;this.y=l(b)?b:0}Ra.prototype.toString=function(){return\&quot;(\&quot;+this.x+\&quot;, \&quot;+this.y+\&quot;)\&quot;};Ra.prototype.ceil=function(){this.x=Math.ceil(this.x);this.y=Math.ceil(this.y);return this};Ra.prototype.floor=function(){this.x=Math.floor(this.x);this.y=Math.floor(this.y);return this};Ra.prototype.round=function(){this.x=Math.round(this.x);this.y=Math.round(this.y);return this};var Sa=x(\&quot;Opera\&quot;),B=x(\&quot;Trident\&quot;)||x(\&quot;MSIE\&quot;),Ta=x(\&quot;Edge\&quot;),Ua=x(\&quot;Gecko\&quot;)&amp;&amp;!(-1!=v.toLowerCase().indexOf(\&quot;webkit\&quot;)&amp;&amp;!x(\&quot;Edge\&quot;))&amp;&amp;!(x(\&quot;Trident\&quot;)||x(\&quot;MSIE\&quot;))&amp;&amp;!x(\&quot;Edge\&quot;),Va=-1!=v.toLowerCase().indexOf(\&quot;webkit\&quot;)&amp;&amp;!x(\&quot;Edge\&quot;);function Wa(){var a=k.document;return a?a.documentMode:void 0}var Xa;\na:{var Ya=\&quot;\&quot;,Za=function(){var a=v;if(Ua)return/rv\\:([^\\);]+)(\\)|;)/.exec(a);if(Ta)return/Edge\\/([\\d\\.]+)/.exec(a);if(B)return/\\b(?:MSIE|rv)[: ]([^\\);]+)(\\)|;)/.exec(a);if(Va)return/WebKit\\/(\\S+)/.exec(a);if(Sa)return/(?:Version)[ \\/]?(\\S+)/.exec(a)}();Za&amp;&amp;(Ya=Za?Za[1]:\&quot;\&quot;);if(B){var $a=Wa();if(null!=$a&amp;&amp;$a&gt;parseFloat(Ya)){Xa=String($a);break a}}Xa=Ya}var la={};\nfunction ab(a){return ka(a,function(){for(var b=0,c=ma(String(Xa)).split(\&quot;.\&quot;),d=ma(String(a)).split(\&quot;.\&quot;),e=Math.max(c.length,d.length),f=0;!b&amp;&amp;f&lt;e;f++){var g=c[f]||\&quot;\&quot;,h=d[f]||\&quot;\&quot;;do{g=/(\\d*)(\\D*)(.*)/.exec(g)||[\&quot;\&quot;,\&quot;\&quot;,\&quot;\&quot;,\&quot;\&quot;];h=/(\\d*)(\\D*)(.*)/.exec(h)||[\&quot;\&quot;,\&quot;\&quot;,\&quot;\&quot;,\&quot;\&quot;];if(0==g[0].length&amp;&amp;0==h[0].length)break;b=na(0==g[1].length?0:parseInt(g[1],10),0==h[1].length?0:parseInt(h[1],10))||na(0==g[2].length,0==h[2].length)||na(g[2],h[2]);g=g[3];h=h[3]}while(!b)}return 0&lt;=b})}var bb;var cb=k.document;\nbb=cb&amp;&amp;B?Wa()||(\&quot;CSS1Compat\&quot;==cb.compatMode?parseInt(Xa,10):5):void 0;function db(a,b,c,d){this.c=a;this.a=b;this.b=c;this.f=d}db.prototype.toString=function(){return\&quot;(\&quot;+this.c+\&quot;t, \&quot;+this.a+\&quot;r, \&quot;+this.b+\&quot;b, \&quot;+this.f+\&quot;l)\&quot;};db.prototype.ceil=function(){this.c=Math.ceil(this.c);this.a=Math.ceil(this.a);this.b=Math.ceil(this.b);this.f=Math.ceil(this.f);return this};db.prototype.floor=function(){this.c=Math.floor(this.c);this.a=Math.floor(this.a);this.b=Math.floor(this.b);this.f=Math.floor(this.f);return this};\ndb.prototype.round=function(){this.c=Math.round(this.c);this.a=Math.round(this.a);this.b=Math.round(this.b);this.f=Math.round(this.f);return this};var eb=x(\&quot;Firefox\&quot;),fb=Ka()||x(\&quot;iPod\&quot;),gb=x(\&quot;iPad\&quot;),hb=x(\&quot;Android\&quot;)&amp;&amp;!(Qa()||x(\&quot;Firefox\&quot;)||x(\&quot;Opera\&quot;)||x(\&quot;Silk\&quot;)),ib=Qa(),jb=x(\&quot;Safari\&quot;)&amp;&amp;!(Qa()||x(\&quot;Coast\&quot;)||x(\&quot;Opera\&quot;)||x(\&quot;Edge\&quot;)||x(\&quot;Silk\&quot;)||x(\&quot;Android\&quot;))&amp;&amp;!(Ka()||x(\&quot;iPad\&quot;)||x(\&quot;iPod\&quot;));var D=B&amp;&amp;!(9&lt;=Number(bb)),kb=B&amp;&amp;!(8&lt;=Number(bb));function E(a,b,c,d){this.a=a;this.b=b;this.width=c;this.height=d}E.prototype.toString=function(){return\&quot;(\&quot;+this.a+\&quot;, \&quot;+this.b+\&quot; - \&quot;+this.width+\&quot;w x \&quot;+this.height+\&quot;h)\&quot;};E.prototype.ceil=function(){this.a=Math.ceil(this.a);this.b=Math.ceil(this.b);this.width=Math.ceil(this.width);this.height=Math.ceil(this.height);return this};E.prototype.floor=function(){this.a=Math.floor(this.a);this.b=Math.floor(this.b);this.width=Math.floor(this.width);this.height=Math.floor(this.height);return this};\nE.prototype.round=function(){this.a=Math.round(this.a);this.b=Math.round(this.b);this.width=Math.round(this.width);this.height=Math.round(this.height);return this};function lb(a){return(a=a.exec(v))?a[1]:\&quot;\&quot;}(function(){if(eb)return lb(/Firefox\\/([0-9.]+)/);if(B||Ta||Sa)return Xa;if(ib)return Ka()||x(\&quot;iPad\&quot;)||x(\&quot;iPod\&quot;)?lb(/CriOS\\/([0-9.]+)/):lb(/Chrome\\/([0-9.]+)/);if(jb&amp;&amp;!(Ka()||x(\&quot;iPad\&quot;)||x(\&quot;iPod\&quot;)))return lb(/Version\\/([0-9.]+)/);if(fb||gb){var a=/Version\\/(\\S+).*Mobile\\/(\\S+)/.exec(v);if(a)return a[1]+\&quot;.\&quot;+a[2]}else if(hb)return(a=lb(/Android\\s+([0-9.]+)/))?a:lb(/Version\\/([0-9.]+)/);return\&quot;\&quot;})();function mb(a,b,c,d){this.a=a;this.nodeName=c;this.nodeValue=d;this.nodeType=2;this.parentNode=this.ownerElement=b}function nb(a,b){var c=kb&amp;&amp;\&quot;href\&quot;==b.nodeName?a.getAttribute(b.nodeName,2):b.nodeValue;return new mb(b,a,b.nodeName,c)};var ob,pb=function(){if(!Ua)return!1;var a=k.Components;if(!a)return!1;try{if(!a.classes)return!1}catch(e){return!1}var b=a.classes,a=a.interfaces,c=b[\&quot;@mozilla.org/xpcom/version-comparator;1\&quot;].getService(a.nsIVersionComparator),d=b[\&quot;@mozilla.org/xre/app-info;1\&quot;].getService(a.nsIXULAppInfo).version;ob=function(a){c.compare(d,\&quot;\&quot;+a)};return!0}(),qb=B&amp;&amp;!(9&lt;=Number(bb));hb&amp;&amp;pb&amp;&amp;ob(2.3);hb&amp;&amp;pb&amp;&amp;ob(4);jb&amp;&amp;pb&amp;&amp;ob(6);function rb(a,b){if(!a||!b)return!1;if(a.contains&amp;&amp;1==b.nodeType)return a==b||a.contains(b);if(\&quot;undefined\&quot;!=typeof a.compareDocumentPosition)return a==b||!!(a.compareDocumentPosition(b)&amp;16);for(;b&amp;&amp;a!=b;)b=b.parentNode;return b==a}\nfunction sb(a,b){if(a==b)return 0;if(a.compareDocumentPosition)return a.compareDocumentPosition(b)&amp;2?1:-1;if(B&amp;&amp;!(9&lt;=Number(bb))){if(9==a.nodeType)return-1;if(9==b.nodeType)return 1}if(\&quot;sourceIndex\&quot;in a||a.parentNode&amp;&amp;\&quot;sourceIndex\&quot;in a.parentNode){var c=1==a.nodeType,d=1==b.nodeType;if(c&amp;&amp;d)return a.sourceIndex-b.sourceIndex;var e=a.parentNode,f=b.parentNode;return e==f?tb(a,b):!c&amp;&amp;rb(e,b)?-1*ub(a,b):!d&amp;&amp;rb(f,a)?ub(b,a):(c?a.sourceIndex:e.sourceIndex)-(d?b.sourceIndex:f.sourceIndex)}d=F(a);c=d.createRange();\nc.selectNode(a);c.collapse(!0);a=d.createRange();a.selectNode(b);a.collapse(!0);return c.compareBoundaryPoints(k.Range.START_TO_END,a)}function ub(a,b){var c=a.parentNode;if(c==b)return-1;for(;b.parentNode!=c;)b=b.parentNode;return tb(b,a)}function tb(a,b){for(;b=b.previousSibling;)if(b==a)return-1;return 1}function F(a){return 9==a.nodeType?a:a.ownerDocument||a.document}function vb(a,b){a&amp;&amp;(a=a.parentNode);for(var c=0;a;){if(b(a))return a;a=a.parentNode;c++}return null}\nfunction wb(a){this.a=a||k.document||document}wb.prototype.getElementsByTagName=function(a,b){return(b||this.a).getElementsByTagName(String(a))};function G(a){var b=null,c=a.nodeType;1==c&amp;&amp;(b=a.textContent,b=void 0==b||null==b?a.innerText:b,b=void 0==b||null==b?\&quot;\&quot;:b);if(\&quot;string\&quot;!=typeof b)if(D&amp;&amp;\&quot;title\&quot;==a.nodeName.toLowerCase()&amp;&amp;1==c)b=a.text;else if(9==c||1==c){a=9==c?a.documentElement:a.firstChild;for(var c=0,d=[],b=\&quot;\&quot;;a;){do 1!=a.nodeType&amp;&amp;(b+=a.nodeValue),D&amp;&amp;\&quot;title\&quot;==a.nodeName.toLowerCase()&amp;&amp;(b+=a.text),d[c++]=a;while(a=a.firstChild);for(;c&amp;&amp;!(a=d[--c].nextSibling););}}else b=a.nodeValue;return\&quot;\&quot;+b}\nfunction H(a,b,c){if(null===b)return!0;try{if(!a.getAttribute)return!1}catch(d){return!1}kb&amp;&amp;\&quot;class\&quot;==b&amp;&amp;(b=\&quot;className\&quot;);return null==c?!!a.getAttribute(b):a.getAttribute(b,2)==c}function xb(a,b,c,d,e){return(D?yb:zb).call(null,a,b,m(c)?c:null,m(d)?d:null,e||new I)}\nfunction yb(a,b,c,d,e){if(a instanceof ya||8==a.b||c&amp;&amp;null===a.b){var f=b.all;if(!f)return e;var g=Ab(a);if(\&quot;*\&quot;!=g&amp;&amp;(f=b.getElementsByTagName(g),!f))return e;if(c){var h=[];for(a=0;b=f[a++];)H(b,c,d)&amp;&amp;h.push(b);f=h}for(a=0;b=f[a++];)\&quot;*\&quot;==g&amp;&amp;\&quot;!\&quot;==b.tagName||J(e,b);return e}Bb(a,b,c,d,e);return e}\nfunction zb(a,b,c,d,e){b.getElementsByName&amp;&amp;d&amp;&amp;\&quot;name\&quot;==c&amp;&amp;!B?(b=b.getElementsByName(d),A(b,function(b){a.a(b)&amp;&amp;J(e,b)})):b.getElementsByClassName&amp;&amp;d&amp;&amp;\&quot;class\&quot;==c?(b=b.getElementsByClassName(d),A(b,function(b){b.className==d&amp;&amp;a.a(b)&amp;&amp;J(e,b)})):a instanceof y?Bb(a,b,c,d,e):b.getElementsByTagName&amp;&amp;(b=b.getElementsByTagName(a.f()),A(b,function(a){H(a,c,d)&amp;&amp;J(e,a)}));return e}\nfunction Cb(a,b,c,d,e){var f;if((a instanceof ya||8==a.b||c&amp;&amp;null===a.b)&amp;&amp;(f=b.childNodes)){var g=Ab(a);if(\&quot;*\&quot;!=g&amp;&amp;(f=Da(f,function(a){return a.tagName&amp;&amp;a.tagName.toLowerCase()==g}),!f))return e;c&amp;&amp;(f=Da(f,function(a){return H(a,c,d)}));A(f,function(a){\&quot;*\&quot;==g&amp;&amp;(\&quot;!\&quot;==a.tagName||\&quot;*\&quot;==g&amp;&amp;1!=a.nodeType)||J(e,a)});return e}return Db(a,b,c,d,e)}function Db(a,b,c,d,e){for(b=b.firstChild;b;b=b.nextSibling)H(b,c,d)&amp;&amp;a.a(b)&amp;&amp;J(e,b);return e}\nfunction Bb(a,b,c,d,e){for(b=b.firstChild;b;b=b.nextSibling)H(b,c,d)&amp;&amp;a.a(b)&amp;&amp;J(e,b),Bb(a,b,c,d,e)}function Ab(a){if(a instanceof y){if(8==a.b)return\&quot;!\&quot;;if(null===a.b)return\&quot;*\&quot;}return a.f()};function K(a,b){b&amp;&amp;\&quot;string\&quot;!==typeof b&amp;&amp;(b=b.toString());return!!a&amp;&amp;1==a.nodeType&amp;&amp;(!b||a.tagName.toUpperCase()==b)};function I(){this.b=this.a=null;this.l=0}function Eb(a){this.node=a;this.a=this.b=null}function Fb(a,b){if(!a.a)return b;if(!b.a)return a;var c=a.a;b=b.a;for(var d=null,e,f=0;c&amp;&amp;b;){e=c.node;var g=b.node;e==g||e instanceof mb&amp;&amp;g instanceof mb&amp;&amp;e.a==g.a?(e=c,c=c.a,b=b.a):0&lt;sb(c.node,b.node)?(e=b,b=b.a):(e=c,c=c.a);(e.b=d)?d.a=e:a.a=e;d=e;f++}for(e=c||b;e;)e.b=d,d=d.a=e,f++,e=e.a;a.b=d;a.l=f;return a}function Gb(a,b){b=new Eb(b);b.a=a.a;a.b?a.a.b=b:a.a=a.b=b;a.a=b;a.l++}\nfunction J(a,b){b=new Eb(b);b.b=a.b;a.a?a.b.a=b:a.a=a.b=b;a.b=b;a.l++}function Hb(a){return(a=a.a)?a.node:null}function Ib(a){return(a=Hb(a))?G(a):\&quot;\&quot;}function L(a,b){return new Jb(a,!!b)}function Jb(a,b){this.f=a;this.b=(this.s=b)?a.b:a.a;this.a=null}function N(a){var b=a.b;if(b){var c=a.a=b;a.b=a.s?b.b:b.a;return c.node}return null};function O(a){this.i=a;this.b=this.g=!1;this.f=null}function z(a){return\&quot;\\n  \&quot;+a.toString().split(\&quot;\\n\&quot;).join(\&quot;\\n  \&quot;)}function Kb(a,b){a.g=b}function Lb(a,b){a.b=b}function Q(a,b){a=a.a(b);return a instanceof I?+Ib(a):+a}function R(a,b){a=a.a(b);return a instanceof I?Ib(a):\&quot;\&quot;+a}function Mb(a,b){a=a.a(b);return a instanceof I?!!a.l:!!a};function Nb(a,b,c){O.call(this,a.i);this.c=a;this.h=b;this.o=c;this.g=b.g||c.g;this.b=b.b||c.b;this.c==Ob&amp;&amp;(c.b||c.g||4==c.i||0==c.i||!b.f?b.b||b.g||4==b.i||0==b.i||!c.f||(this.f={name:c.f.name,u:b}):this.f={name:b.f.name,u:c})}p(Nb,O);\nfunction Pb(a,b,c,d,e){b=b.a(d);c=c.a(d);var f;if(b instanceof I&amp;&amp;c instanceof I){b=L(b);for(d=N(b);d;d=N(b))for(e=L(c),f=N(e);f;f=N(e))if(a(G(d),G(f)))return!0;return!1}if(b instanceof I||c instanceof I){b instanceof I?(e=b,d=c):(e=c,d=b);f=L(e);for(var g=typeof d,h=N(f);h;h=N(f)){switch(g){case \&quot;number\&quot;:h=+G(h);break;case \&quot;boolean\&quot;:h=!!G(h);break;case \&quot;string\&quot;:h=G(h);break;default:throw Error(\&quot;Illegal primitive type for comparison.\&quot;);}if(e==b&amp;&amp;a(h,d)||e==c&amp;&amp;a(d,h))return!0}return!1}return e?\&quot;boolean\&quot;==\ntypeof b||\&quot;boolean\&quot;==typeof c?a(!!b,!!c):\&quot;number\&quot;==typeof b||\&quot;number\&quot;==typeof c?a(+b,+c):a(b,c):a(+b,+c)}Nb.prototype.a=function(a){return this.c.m(this.h,this.o,a)};Nb.prototype.toString=function(){var a=\&quot;Binary Expression: \&quot;+this.c,a=a+z(this.h);return a+=z(this.o)};function Qb(a,b,c,d){this.I=a;this.D=b;this.i=c;this.m=d}Qb.prototype.toString=function(){return this.I};var Rb={};\nfunction S(a,b,c,d){if(Rb.hasOwnProperty(a))throw Error(\&quot;Binary operator already created: \&quot;+a);a=new Qb(a,b,c,d);return Rb[a.toString()]=a}S(\&quot;div\&quot;,6,1,function(a,b,c){return Q(a,c)/Q(b,c)});S(\&quot;mod\&quot;,6,1,function(a,b,c){return Q(a,c)%Q(b,c)});S(\&quot;*\&quot;,6,1,function(a,b,c){return Q(a,c)*Q(b,c)});S(\&quot;+\&quot;,5,1,function(a,b,c){return Q(a,c)+Q(b,c)});S(\&quot;-\&quot;,5,1,function(a,b,c){return Q(a,c)-Q(b,c)});S(\&quot;&lt;\&quot;,4,2,function(a,b,c){return Pb(function(a,b){return a&lt;b},a,b,c)});\nS(\&quot;&gt;\&quot;,4,2,function(a,b,c){return Pb(function(a,b){return a&gt;b},a,b,c)});S(\&quot;&lt;=\&quot;,4,2,function(a,b,c){return Pb(function(a,b){return a&lt;=b},a,b,c)});S(\&quot;&gt;=\&quot;,4,2,function(a,b,c){return Pb(function(a,b){return a&gt;=b},a,b,c)});var Ob=S(\&quot;=\&quot;,3,2,function(a,b,c){return Pb(function(a,b){return a==b},a,b,c,!0)});S(\&quot;!=\&quot;,3,2,function(a,b,c){return Pb(function(a,b){return a!=b},a,b,c,!0)});S(\&quot;and\&quot;,2,2,function(a,b,c){return Mb(a,c)&amp;&amp;Mb(b,c)});S(\&quot;or\&quot;,1,2,function(a,b,c){return Mb(a,c)||Mb(b,c)});function Sb(a,b){if(b.a.length&amp;&amp;4!=a.i)throw Error(\&quot;Primary expression must evaluate to nodeset if filter has predicate(s).\&quot;);O.call(this,a.i);this.c=a;this.h=b;this.g=a.g;this.b=a.b}p(Sb,O);Sb.prototype.a=function(a){a=this.c.a(a);return Tb(this.h,a)};Sb.prototype.toString=function(){var a=\&quot;Filter:\&quot;+z(this.c);return a+=z(this.h)};function Ub(a,b){if(b.length&lt;a.C)throw Error(\&quot;Function \&quot;+a.j+\&quot; expects at least\&quot;+a.C+\&quot; arguments, \&quot;+b.length+\&quot; given\&quot;);if(null!==a.A&amp;&amp;b.length&gt;a.A)throw Error(\&quot;Function \&quot;+a.j+\&quot; expects at most \&quot;+a.A+\&quot; arguments, \&quot;+b.length+\&quot; given\&quot;);a.H&amp;&amp;A(b,function(b,d){if(4!=b.i)throw Error(\&quot;Argument \&quot;+d+\&quot; to function \&quot;+a.j+\&quot; is not of type Nodeset: \&quot;+b);});O.call(this,a.i);this.v=a;this.c=b;Kb(this,a.g||Fa(b,function(a){return a.g}));Lb(this,a.G&amp;&amp;!b.length||a.F&amp;&amp;!!b.length||Fa(b,function(a){return a.b}))}\np(Ub,O);Ub.prototype.a=function(a){return this.v.m.apply(null,Ia(a,this.c))};Ub.prototype.toString=function(){var a=\&quot;Function: \&quot;+this.v;if(this.c.length)var b=Ea(this.c,function(a,b){return a+z(b)},\&quot;Arguments:\&quot;),a=a+z(b);return a};function Vb(a,b,c,d,e,f,g,h,r){this.j=a;this.i=b;this.g=c;this.G=d;this.F=e;this.m=f;this.C=g;this.A=l(h)?h:g;this.H=!!r}Vb.prototype.toString=function(){return this.j};var Wb={};\nfunction T(a,b,c,d,e,f,g,h){if(Wb.hasOwnProperty(a))throw Error(\&quot;Function already created: \&quot;+a+\&quot;.\&quot;);Wb[a]=new Vb(a,b,c,d,!1,e,f,g,h)}T(\&quot;boolean\&quot;,2,!1,!1,function(a,b){return Mb(b,a)},1);T(\&quot;ceiling\&quot;,1,!1,!1,function(a,b){return Math.ceil(Q(b,a))},1);T(\&quot;concat\&quot;,3,!1,!1,function(a,b){return Ea(Ja(arguments,1),function(b,d){return b+R(d,a)},\&quot;\&quot;)},2,null);T(\&quot;contains\&quot;,2,!1,!1,function(a,b,c){b=R(b,a);a=R(c,a);return-1!=b.indexOf(a)},2);T(\&quot;count\&quot;,1,!1,!1,function(a,b){return b.a(a).l},1,1,!0);\nT(\&quot;false\&quot;,2,!1,!1,function(){return!1},0);T(\&quot;floor\&quot;,1,!1,!1,function(a,b){return Math.floor(Q(b,a))},1);T(\&quot;id\&quot;,4,!1,!1,function(a,b){function c(a){if(D){var b=e.all[a];if(b){if(b.nodeType&amp;&amp;a==b.id)return b;if(b.length)return Ha(b,function(b){return a==b.id})}return null}return e.getElementById(a)}var d=a.a,e=9==d.nodeType?d:d.ownerDocument;a=R(b,a).split(/\\s+/);var f=[];A(a,function(a){a=c(a);!a||0&lt;=Ca(f,a)||f.push(a)});f.sort(sb);var g=new I;A(f,function(a){J(g,a)});return g},1);\nT(\&quot;lang\&quot;,2,!1,!1,function(){return!1},1);T(\&quot;last\&quot;,1,!0,!1,function(a){if(1!=arguments.length)throw Error(\&quot;Function last expects ()\&quot;);return a.f},0);T(\&quot;local-name\&quot;,3,!1,!0,function(a,b){return(a=b?Hb(b.a(a)):a.a)?a.localName||a.nodeName.toLowerCase():\&quot;\&quot;},0,1,!0);T(\&quot;name\&quot;,3,!1,!0,function(a,b){return(a=b?Hb(b.a(a)):a.a)?a.nodeName.toLowerCase():\&quot;\&quot;},0,1,!0);T(\&quot;namespace-uri\&quot;,3,!0,!1,function(){return\&quot;\&quot;},0,1,!0);\nT(\&quot;normalize-space\&quot;,3,!1,!0,function(a,b){return(b?R(b,a):G(a.a)).replace(/[\\s\\xa0]+/g,\&quot; \&quot;).replace(/^\\s+|\\s+$/g,\&quot;\&quot;)},0,1);T(\&quot;not\&quot;,2,!1,!1,function(a,b){return!Mb(b,a)},1);T(\&quot;number\&quot;,1,!1,!0,function(a,b){return b?Q(b,a):+G(a.a)},0,1);T(\&quot;position\&quot;,1,!0,!1,function(a){return a.b},0);T(\&quot;round\&quot;,1,!1,!1,function(a,b){return Math.round(Q(b,a))},1);T(\&quot;starts-with\&quot;,2,!1,!1,function(a,b,c){b=R(b,a);a=R(c,a);return!b.lastIndexOf(a,0)},2);T(\&quot;string\&quot;,3,!1,!0,function(a,b){return b?R(b,a):G(a.a)},0,1);\nT(\&quot;string-length\&quot;,1,!1,!0,function(a,b){return(b?R(b,a):G(a.a)).length},0,1);T(\&quot;substring\&quot;,3,!1,!1,function(a,b,c,d){c=Q(c,a);if(isNaN(c)||Infinity==c||-Infinity==c)return\&quot;\&quot;;d=d?Q(d,a):Infinity;if(isNaN(d)||-Infinity===d)return\&quot;\&quot;;c=Math.round(c)-1;var e=Math.max(c,0);a=R(b,a);return Infinity==d?a.substring(e):a.substring(e,c+Math.round(d))},2,3);T(\&quot;substring-after\&quot;,3,!1,!1,function(a,b,c){b=R(b,a);a=R(c,a);c=b.indexOf(a);return-1==c?\&quot;\&quot;:b.substring(c+a.length)},2);\nT(\&quot;substring-before\&quot;,3,!1,!1,function(a,b,c){b=R(b,a);a=R(c,a);a=b.indexOf(a);return-1==a?\&quot;\&quot;:b.substring(0,a)},2);T(\&quot;sum\&quot;,1,!1,!1,function(a,b){a=L(b.a(a));b=0;for(var c=N(a);c;c=N(a))b+=+G(c);return b},1,1,!0);T(\&quot;translate\&quot;,3,!1,!1,function(a,b,c,d){b=R(b,a);c=R(c,a);var e=R(d,a);d={};for(var f=0;f&lt;c.length;f++)a=c.charAt(f),a in d||(d[a]=e.charAt(f));c=\&quot;\&quot;;for(f=0;f&lt;b.length;f++)a=b.charAt(f),c+=a in d?d[a]:a;return c},3);T(\&quot;true\&quot;,2,!1,!1,function(){return!0},0);function Xb(a){O.call(this,3);this.c=a.substring(1,a.length-1)}p(Xb,O);Xb.prototype.a=function(){return this.c};Xb.prototype.toString=function(){return\&quot;Literal: \&quot;+this.c};function Yb(a){O.call(this,1);this.c=a}p(Yb,O);Yb.prototype.a=function(){return this.c};Yb.prototype.toString=function(){return\&quot;Number: \&quot;+this.c};function Zb(a,b){O.call(this,a.i);this.h=a;this.c=b;this.g=a.g;this.b=a.b;1==this.c.length&amp;&amp;(a=this.c[0],a.w||a.c!=$b||(a=a.o,\&quot;*\&quot;!=a.f()&amp;&amp;(this.f={name:a.f(),u:null})))}p(Zb,O);function ac(){O.call(this,4)}p(ac,O);ac.prototype.a=function(a){var b=new I;a=a.a;9==a.nodeType?J(b,a):J(b,a.ownerDocument);return b};ac.prototype.toString=function(){return\&quot;Root Helper Expression\&quot;};function bc(){O.call(this,4)}p(bc,O);bc.prototype.a=function(a){var b=new I;J(b,a.a);return b};bc.prototype.toString=function(){return\&quot;Context Helper Expression\&quot;};\nfunction cc(a){return\&quot;/\&quot;==a||\&quot;//\&quot;==a}Zb.prototype.a=function(a){var b=this.h.a(a);if(!(b instanceof I))throw Error(\&quot;Filter expression must evaluate to nodeset.\&quot;);a=this.c;for(var c=0,d=a.length;c&lt;d&amp;&amp;b.l;c++){var e=a[c],f=L(b,e.c.s);if(e.g||e.c!=dc)if(e.g||e.c!=ec){var g=N(f);for(b=e.a(new pa(g));g=N(f);)g=e.a(new pa(g)),b=Fb(b,g)}else g=N(f),b=e.a(new pa(g));else{for(g=N(f);(b=N(f))&amp;&amp;(!g.contains||g.contains(b))&amp;&amp;b.compareDocumentPosition(g)&amp;8;g=b);b=e.a(new pa(g))}}return b};\nZb.prototype.toString=function(){var a=\&quot;Path Expression:\&quot;+z(this.h);if(this.c.length){var b=Ea(this.c,function(a,b){return a+z(b)},\&quot;Steps:\&quot;);a+=z(b)}return a};function fc(a,b){this.a=a;this.s=!!b}\nfunction Tb(a,b,c){for(c=c||0;c&lt;a.a.length;c++)for(var d=a.a[c],e=L(b),f=b.l,g,h=0;g=N(e);h++){var r=a.s?f-h:h+1;g=d.a(new pa(g,r,f));if(\&quot;number\&quot;==typeof g)r=r==g;else if(\&quot;string\&quot;==typeof g||\&quot;boolean\&quot;==typeof g)r=!!g;else if(g instanceof I)r=0&lt;g.l;else throw Error(\&quot;Predicate.evaluate returned an unexpected type.\&quot;);if(!r){r=e;g=r.f;var w=r.a;if(!w)throw Error(\&quot;Next must be called at least once before remove.\&quot;);var n=w.b,w=w.a;n?n.a=w:g.a=w;w?w.b=n:g.b=n;g.l--;r.a=null}}return b}\nfc.prototype.toString=function(){return Ea(this.a,function(a,b){return a+z(b)},\&quot;Predicates:\&quot;)};function gc(a){O.call(this,1);this.c=a;this.g=a.g;this.b=a.b}p(gc,O);gc.prototype.a=function(a){return-Q(this.c,a)};gc.prototype.toString=function(){return\&quot;Unary Expression: -\&quot;+z(this.c)};function hc(a){O.call(this,4);this.c=a;Kb(this,Fa(this.c,function(a){return a.g}));Lb(this,Fa(this.c,function(a){return a.b}))}p(hc,O);hc.prototype.a=function(a){var b=new I;A(this.c,function(c){c=c.a(a);if(!(c instanceof I))throw Error(\&quot;Path expression must evaluate to NodeSet.\&quot;);b=Fb(b,c)});return b};hc.prototype.toString=function(){return Ea(this.c,function(a,b){return a+z(b)},\&quot;Union Expression:\&quot;)};function U(a,b,c,d){O.call(this,4);this.c=a;this.o=b;this.h=c||new fc([]);this.w=!!d;b=this.h;b=0&lt;b.a.length?b.a[0].f:null;a.J&amp;&amp;b&amp;&amp;(a=b.name,a=D?a.toLowerCase():a,this.f={name:a,u:b.u});a:{a=this.h;for(b=0;b&lt;a.a.length;b++)if(c=a.a[b],c.g||1==c.i||0==c.i){a=!0;break a}a=!1}this.g=a}p(U,O);\nU.prototype.a=function(a){var b=a.a,c=this.f,d=null,e=null,f=0;c&amp;&amp;(d=c.name,e=c.u?R(c.u,a):null,f=1);if(this.w)if(this.g||this.c!=ic)if(b=L((new U(jc,new y(\&quot;node\&quot;))).a(a)),c=N(b))for(a=this.m(c,d,e,f);c=N(b);)a=Fb(a,this.m(c,d,e,f));else a=new I;else a=xb(this.o,b,d,e),a=Tb(this.h,a,f);else a=this.m(a.a,d,e,f);return a};U.prototype.m=function(a,b,c,d){a=this.c.v(this.o,a,b,c);return a=Tb(this.h,a,d)};\nU.prototype.toString=function(){var a=\&quot;Step:\&quot;+z(\&quot;Operator: \&quot;+(this.w?\&quot;//\&quot;:\&quot;/\&quot;));this.c.j&amp;&amp;(a+=z(\&quot;Axis: \&quot;+this.c));a+=z(this.o);if(this.h.a.length){var b=Ea(this.h.a,function(a,b){return a+z(b)},\&quot;Predicates:\&quot;);a+=z(b)}return a};function kc(a,b,c,d){this.j=a;this.v=b;this.s=c;this.J=d}kc.prototype.toString=function(){return this.j};var lc={};function V(a,b,c,d){if(lc.hasOwnProperty(a))throw Error(\&quot;Axis already created: \&quot;+a);b=new kc(a,b,c,!!d);return lc[a]=b}\nV(\&quot;ancestor\&quot;,function(a,b){for(var c=new I;b=b.parentNode;)a.a(b)&amp;&amp;Gb(c,b);return c},!0);V(\&quot;ancestor-or-self\&quot;,function(a,b){var c=new I;do a.a(b)&amp;&amp;Gb(c,b);while(b=b.parentNode);return c},!0);\nvar $b=V(\&quot;attribute\&quot;,function(a,b){var c=new I,d=a.f();if(\&quot;style\&quot;==d&amp;&amp;D&amp;&amp;b.style)return J(c,new mb(b.style,b,\&quot;style\&quot;,b.style.cssText)),c;var e=b.attributes;if(e)if(a instanceof y&amp;&amp;null===a.b||\&quot;*\&quot;==d)for(d=0;a=e[d];d++)D?a.nodeValue&amp;&amp;J(c,nb(b,a)):J(c,a);else(a=e.getNamedItem(d))&amp;&amp;(D?a.nodeValue&amp;&amp;J(c,nb(b,a)):J(c,a));return c},!1),ic=V(\&quot;child\&quot;,function(a,b,c,d,e){return(D?Cb:Db).call(null,a,b,m(c)?c:null,m(d)?d:null,e||new I)},!1,!0);V(\&quot;descendant\&quot;,xb,!1,!0);\nvar jc=V(\&quot;descendant-or-self\&quot;,function(a,b,c,d){var e=new I;H(b,c,d)&amp;&amp;a.a(b)&amp;&amp;J(e,b);return xb(a,b,c,d,e)},!1,!0),dc=V(\&quot;following\&quot;,function(a,b,c,d){var e=new I;do for(var f=b;f=f.nextSibling;)H(f,c,d)&amp;&amp;a.a(f)&amp;&amp;J(e,f),e=xb(a,f,c,d,e);while(b=b.parentNode);return e},!1,!0);V(\&quot;following-sibling\&quot;,function(a,b){for(var c=new I;b=b.nextSibling;)a.a(b)&amp;&amp;J(c,b);return c},!1);V(\&quot;namespace\&quot;,function(){return new I},!1);\nvar mc=V(\&quot;parent\&quot;,function(a,b){var c=new I;if(9==b.nodeType)return c;if(2==b.nodeType)return J(c,b.ownerElement),c;b=b.parentNode;a.a(b)&amp;&amp;J(c,b);return c},!1),ec=V(\&quot;preceding\&quot;,function(a,b,c,d){var e=new I,f=[];do f.unshift(b);while(b=b.parentNode);for(var g=1,h=f.length;g&lt;h;g++){var r=[];for(b=f[g];b=b.previousSibling;)r.unshift(b);for(var w=0,n=r.length;w&lt;n;w++)b=r[w],H(b,c,d)&amp;&amp;a.a(b)&amp;&amp;J(e,b),e=xb(a,b,c,d,e)}return e},!0,!0);\nV(\&quot;preceding-sibling\&quot;,function(a,b){for(var c=new I;b=b.previousSibling;)a.a(b)&amp;&amp;Gb(c,b);return c},!0);var nc=V(\&quot;self\&quot;,function(a,b){var c=new I;a.a(b)&amp;&amp;J(c,b);return c},!1);function oc(a,b){this.a=a;this.b=b}function pc(a){for(var b,c=[];;){W(a,\&quot;Missing right hand side of binary expression.\&quot;);b=qc(a);var d=u(a.a);if(!d)break;var e=(d=Rb[d]||null)&amp;&amp;d.D;if(!e){a.a.a--;break}for(;c.length&amp;&amp;e&lt;=c[c.length-1].D;)b=new Nb(c.pop(),c.pop(),b);c.push(b,d)}for(;c.length;)b=new Nb(c.pop(),c.pop(),b);return b}function W(a,b){if(ua(a.a))throw Error(b);}function rc(a,b){a=u(a.a);if(a!=b)throw Error(\&quot;Bad token, expected: \&quot;+b+\&quot; got: \&quot;+a);}\nfunction sc(a){a=u(a.a);if(\&quot;)\&quot;!=a)throw Error(\&quot;Bad token: \&quot;+a);}function tc(a){a=u(a.a);if(2&gt;a.length)throw Error(\&quot;Unclosed literal string\&quot;);return new Xb(a)}\nfunction uc(a){var b=[];if(cc(t(a.a))){var c=u(a.a);var d=t(a.a);if(\&quot;/\&quot;==c&amp;&amp;(ua(a.a)||\&quot;.\&quot;!=d&amp;&amp;\&quot;..\&quot;!=d&amp;&amp;\&quot;@\&quot;!=d&amp;&amp;\&quot;*\&quot;!=d&amp;&amp;!/(?![0-9])[\\w]/.test(d)))return new ac;d=new ac;W(a,\&quot;Missing next location step.\&quot;);c=vc(a,c);b.push(c)}else{a:{c=t(a.a);d=c.charAt(0);switch(d){case \&quot;$\&quot;:throw Error(\&quot;Variable reference not allowed in HTML XPath\&quot;);case \&quot;(\&quot;:u(a.a);c=pc(a);W(a,&#x27;unclosed \&quot;(\&quot;&#x27;);rc(a,\&quot;)\&quot;);break;case &#x27;\&quot;&#x27;:case \&quot;&#x27;\&quot;:c=tc(a);break;default:if(isNaN(+c))if(!xa(c)&amp;&amp;/(?![0-9])[\\w]/.test(d)&amp;&amp;\&quot;(\&quot;==t(a.a,1)){c=u(a.a);\nc=Wb[c]||null;u(a.a);for(d=[];\&quot;)\&quot;!=t(a.a);){W(a,\&quot;Missing function argument list.\&quot;);d.push(pc(a));if(\&quot;,\&quot;!=t(a.a))break;u(a.a)}W(a,\&quot;Unclosed function argument list.\&quot;);sc(a);c=new Ub(c,d)}else{c=null;break a}else c=new Yb(+u(a.a))}\&quot;[\&quot;==t(a.a)&amp;&amp;(d=new fc(wc(a)),c=new Sb(c,d))}if(c)if(cc(t(a.a)))d=c;else return c;else c=vc(a,\&quot;/\&quot;),d=new bc,b.push(c)}for(;cc(t(a.a));)c=u(a.a),W(a,\&quot;Missing next location step.\&quot;),c=vc(a,c),b.push(c);return new Zb(d,b)}\nfunction vc(a,b){if(\&quot;/\&quot;!=b&amp;&amp;\&quot;//\&quot;!=b)throw Error(&#x27;Step op should be \&quot;/\&quot; or \&quot;//\&quot;&#x27;);if(\&quot;.\&quot;==t(a.a)){var c=new U(nc,new y(\&quot;node\&quot;));u(a.a);return c}if(\&quot;..\&quot;==t(a.a))return c=new U(mc,new y(\&quot;node\&quot;)),u(a.a),c;if(\&quot;@\&quot;==t(a.a)){var d=$b;u(a.a);W(a,\&quot;Missing attribute name\&quot;)}else if(\&quot;::\&quot;==t(a.a,1)){if(!/(?![0-9])[\\w]/.test(t(a.a).charAt(0)))throw Error(\&quot;Bad token: \&quot;+u(a.a));var e=u(a.a);d=lc[e]||null;if(!d)throw Error(\&quot;No axis with name: \&quot;+e);u(a.a);W(a,\&quot;Missing node name\&quot;)}else d=ic;e=t(a.a);if(/(?![0-9])[\\w\\*]/.test(e.charAt(0)))if(\&quot;(\&quot;==\nt(a.a,1)){if(!xa(e))throw Error(\&quot;Invalid node type: \&quot;+e);e=u(a.a);if(!xa(e))throw Error(\&quot;Invalid type name: \&quot;+e);rc(a,\&quot;(\&quot;);W(a,\&quot;Bad nodetype\&quot;);var f=t(a.a).charAt(0),g=null;if(&#x27;\&quot;&#x27;==f||\&quot;&#x27;\&quot;==f)g=tc(a);W(a,\&quot;Bad nodetype\&quot;);sc(a);e=new y(e,g)}else if(e=u(a.a),f=e.indexOf(\&quot;:\&quot;),-1==f)e=new ya(e);else{var g=e.substring(0,f);if(\&quot;*\&quot;==g)var h=\&quot;*\&quot;;else if(h=a.b(g),!h)throw Error(\&quot;Namespace prefix not declared: \&quot;+g);e=e.substr(f+1);e=new ya(e,h)}else throw Error(\&quot;Bad token: \&quot;+u(a.a));a=new fc(wc(a),d.s);return c||\nnew U(d,e,a,\&quot;//\&quot;==b)}function wc(a){for(var b=[];\&quot;[\&quot;==t(a.a);){u(a.a);W(a,\&quot;Missing predicate expression.\&quot;);var c=pc(a);b.push(c);W(a,\&quot;Unclosed predicate expression.\&quot;);rc(a,\&quot;]\&quot;)}return b}function qc(a){if(\&quot;-\&quot;==t(a.a))return u(a.a),new gc(qc(a));var b=uc(a);if(\&quot;|\&quot;!=t(a.a))a=b;else{for(b=[b];\&quot;|\&quot;==u(a.a);)W(a,\&quot;Missing next union location path.\&quot;),b.push(uc(a));a.a.a--;a=new hc(b)}return a};function xc(a,b){if(!a.length)throw Error(\&quot;Empty XPath expression.\&quot;);a=ra(a);if(ua(a))throw Error(\&quot;Invalid XPath expression.\&quot;);b?\&quot;function\&quot;==ba(b)||(b=ea(b.lookupNamespaceURI,b)):b=function(){return null};var c=pc(new oc(a,b));if(!ua(a))throw Error(\&quot;Bad token: \&quot;+u(a));this.evaluate=function(a,b){a=c.a(new pa(a));return new X(a,b)}}\nfunction X(a,b){if(!b)if(a instanceof I)b=4;else if(\&quot;string\&quot;==typeof a)b=2;else if(\&quot;number\&quot;==typeof a)b=1;else if(\&quot;boolean\&quot;==typeof a)b=3;else throw Error(\&quot;Unexpected evaluation result.\&quot;);if(2!=b&amp;&amp;1!=b&amp;&amp;3!=b&amp;&amp;!(a instanceof I))throw Error(\&quot;value could not be converted to the specified type\&quot;);this.resultType=b;switch(b){case 2:this.stringValue=a instanceof I?Ib(a):\&quot;\&quot;+a;break;case 1:this.numberValue=a instanceof I?+Ib(a):+a;break;case 3:this.booleanValue=a instanceof I?0&lt;a.l:!!a;break;case 4:case 5:case 6:case 7:var c=\nL(a);var d=[];for(var e=N(c);e;e=N(c))d.push(e instanceof mb?e.a:e);this.snapshotLength=a.l;this.invalidIteratorState=!1;break;case 8:case 9:a=Hb(a);this.singleNodeValue=a instanceof mb?a.a:a;break;default:throw Error(\&quot;Unknown XPathResult type.\&quot;);}var f=0;this.iterateNext=function(){if(4!=b&amp;&amp;5!=b)throw Error(\&quot;iterateNext called with wrong result type\&quot;);return f&gt;=d.length?null:d[f++]};this.snapshotItem=function(a){if(6!=b&amp;&amp;7!=b)throw Error(\&quot;snapshotItem called with wrong result type\&quot;);return a&gt;=d.length||\n0&gt;a?null:d[a]}}X.ANY_TYPE=0;X.NUMBER_TYPE=1;X.STRING_TYPE=2;X.BOOLEAN_TYPE=3;X.UNORDERED_NODE_ITERATOR_TYPE=4;X.ORDERED_NODE_ITERATOR_TYPE=5;X.UNORDERED_NODE_SNAPSHOT_TYPE=6;X.ORDERED_NODE_SNAPSHOT_TYPE=7;X.ANY_UNORDERED_NODE_TYPE=8;X.FIRST_ORDERED_NODE_TYPE=9;function yc(a){this.lookupNamespaceURI=za(a)}\nfunction zc(a,b){a=a||k;var c=a.Document&amp;&amp;a.Document.prototype||a.document;if(!c.evaluate||b)a.XPathResult=X,c.evaluate=function(a,b,c,g){return(new xc(a,c)).evaluate(b,g)},c.createExpression=function(a,b){return new xc(a,b)},c.createNSResolver=function(a){return new yc(a)}}aa(\&quot;wgxpath.install\&quot;,zc);var Ac=function(){var a={M:\&quot;http://www.w3.org/2000/svg\&quot;};return function(b){return a[b]||null}}();\nfunction Bc(a,b){var c=F(a);if(!c.documentElement)return null;(B||hb)&amp;&amp;zc(c?c.parentWindow||c.defaultView:window);try{var d=c.createNSResolver?c.createNSResolver(c.documentElement):Ac;if(B&amp;&amp;!ab(7))return c.evaluate.call(c,b,a,d,9,null);if(!B||9&lt;=Number(bb)){for(var e={},f=c.getElementsByTagName(\&quot;*\&quot;),g=0;g&lt;f.length;++g){var h=f[g],r=h.namespaceURI;if(r&amp;&amp;!e[r]){var w=h.lookupPrefix(r);if(!w)var n=r.match(\&quot;.*/(\\\\w+)/?$\&quot;),w=n?n[1]:\&quot;xhtml\&quot;;e[r]=w}}var C={},M;for(M in e)C[e[M]]=M;d=function(a){return C[a]||\nnull}}try{return c.evaluate(b,a,d,9,null)}catch(P){if(\&quot;TypeError\&quot;===P.name)return d=c.createNSResolver?c.createNSResolver(c.documentElement):Ac,c.evaluate(b,a,d,9,null);throw P;}}catch(P){if(!Ua||\&quot;NS_ERROR_ILLEGAL_VALUE\&quot;!=P.name)throw new ga(32,\&quot;Unable to locate an element with the xpath expression \&quot;+b+\&quot; because of the following error:\\n\&quot;+P);}}\nfunction Cc(a,b){var c=function(){var c=Bc(b,a);return c?c.singleNodeValue||null:b.selectSingleNode?(c=F(b),c.setProperty&amp;&amp;c.setProperty(\&quot;SelectionLanguage\&quot;,\&quot;XPath\&quot;),b.selectSingleNode(a)):null}();if(null!==c&amp;&amp;(!c||1!=c.nodeType))throw new ga(32,&#x27;The result of the xpath expression \&quot;&#x27;+a+&#x27;\&quot; is: &#x27;+c+\&quot;. It should be an element.\&quot;);return c};var Dc=\&quot;function\&quot;===typeof ShadowRoot;function Ec(a){for(a=a.parentNode;a&amp;&amp;1!=a.nodeType&amp;&amp;9!=a.nodeType&amp;&amp;11!=a.nodeType;)a=a.parentNode;return K(a)?a:null}\nfunction Y(a,b){b=oa(b);if(\&quot;float\&quot;==b||\&quot;cssFloat\&quot;==b||\&quot;styleFloat\&quot;==b)b=qb?\&quot;styleFloat\&quot;:\&quot;cssFloat\&quot;;a:{var c=b;var d=F(a);if(d.defaultView&amp;&amp;d.defaultView.getComputedStyle&amp;&amp;(d=d.defaultView.getComputedStyle(a,null))){c=d[c]||d.getPropertyValue(c)||\&quot;\&quot;;break a}c=\&quot;\&quot;}a=c||Fc(a,b);if(null===a)a=null;else if(0&lt;=Ca(La,b)){b:{var e=a.match(Oa);if(e&amp;&amp;(b=Number(e[1]),c=Number(e[2]),d=Number(e[3]),e=Number(e[4]),0&lt;=b&amp;&amp;255&gt;=b&amp;&amp;0&lt;=c&amp;&amp;255&gt;=c&amp;&amp;0&lt;=d&amp;&amp;255&gt;=d&amp;&amp;0&lt;=e&amp;&amp;1&gt;=e)){b=[b,c,d,e];break b}b=null}if(!b)b:{if(d=a.match(Pa))if(b=\nNumber(d[1]),c=Number(d[2]),d=Number(d[3]),0&lt;=b&amp;&amp;255&gt;=b&amp;&amp;0&lt;=c&amp;&amp;255&gt;=c&amp;&amp;0&lt;=d&amp;&amp;255&gt;=d){b=[b,c,d,1];break b}b=null}if(!b)b:{b=a.toLowerCase();c=ia[b.toLowerCase()];if(!c&amp;&amp;(c=\&quot;#\&quot;==b.charAt(0)?b:\&quot;#\&quot;+b,4==c.length&amp;&amp;(c=c.replace(Ma,\&quot;#$1$1$2$2$3$3\&quot;)),!Na.test(c))){b=null;break b}b=[parseInt(c.substr(1,2),16),parseInt(c.substr(3,2),16),parseInt(c.substr(5,2),16),1]}a=b?\&quot;rgba(\&quot;+b.join(\&quot;, \&quot;)+\&quot;)\&quot;:a}return a}\nfunction Fc(a,b){var c=a.currentStyle||a.style,d=c[b];!l(d)&amp;&amp;\&quot;function\&quot;==ba(c.getPropertyValue)&amp;&amp;(d=c.getPropertyValue(b));return\&quot;inherit\&quot;!=d?l(d)?d:null:(a=Ec(a))?Fc(a,b):null}\nfunction Gc(a,b,c){function d(a){var b=Hc(a);return 0&lt;b.height&amp;&amp;0&lt;b.width?!0:K(a,\&quot;PATH\&quot;)&amp;&amp;(0&lt;b.height||0&lt;b.width)?(a=Y(a,\&quot;stroke-width\&quot;),!!a&amp;&amp;0&lt;parseInt(a,10)):\&quot;hidden\&quot;!=Y(a,\&quot;overflow\&quot;)&amp;&amp;Fa(a.childNodes,function(a){return 3==a.nodeType||K(a)&amp;&amp;d(a)})}function e(a){return Ic(a)==Z&amp;&amp;Ga(a.childNodes,function(a){return!K(a)||e(a)||!d(a)})}if(!K(a))throw Error(\&quot;Argument to isShown must be of type Element\&quot;);if(K(a,\&quot;BODY\&quot;))return!0;if(K(a,\&quot;OPTION\&quot;)||K(a,\&quot;OPTGROUP\&quot;))return a=vb(a,function(a){return K(a,\&quot;SELECT\&quot;)}),\n!!a&amp;&amp;Gc(a,!0,c);var f=Jc(a);if(f)return!!f.B&amp;&amp;0&lt;f.rect.width&amp;&amp;0&lt;f.rect.height&amp;&amp;Gc(f.B,b,c);if(K(a,\&quot;INPUT\&quot;)&amp;&amp;\&quot;hidden\&quot;==a.type.toLowerCase()||K(a,\&quot;NOSCRIPT\&quot;))return!1;f=Y(a,\&quot;visibility\&quot;);return\&quot;collapse\&quot;!=f&amp;&amp;\&quot;hidden\&quot;!=f&amp;&amp;c(a)&amp;&amp;(b||Kc(a))&amp;&amp;d(a)?!e(a):!1}var Z=\&quot;hidden\&quot;;\nfunction Ic(a){function b(a){function b(a){return a==g?!0:!Y(a,\&quot;display\&quot;).lastIndexOf(\&quot;inline\&quot;,0)||\&quot;absolute\&quot;==c&amp;&amp;\&quot;static\&quot;==Y(a,\&quot;position\&quot;)?!1:!0}var c=Y(a,\&quot;position\&quot;);if(\&quot;fixed\&quot;==c)return w=!0,a==g?null:g;for(a=Ec(a);a&amp;&amp;!b(a);)a=Ec(a);return a}function c(a){var b=a;if(\&quot;visible\&quot;==r)if(a==g&amp;&amp;h)b=h;else if(a==h)return{x:\&quot;visible\&quot;,y:\&quot;visible\&quot;};b={x:Y(b,\&quot;overflow-x\&quot;),y:Y(b,\&quot;overflow-y\&quot;)};a==g&amp;&amp;(b.x=\&quot;visible\&quot;==b.x?\&quot;auto\&quot;:b.x,b.y=\&quot;visible\&quot;==b.y?\&quot;auto\&quot;:b.y);return b}function d(a){if(a==g){var b=(new wb(f)).a;\na=b.scrollingElement?b.scrollingElement:Va||\&quot;CSS1Compat\&quot;!=b.compatMode?b.body||b.documentElement:b.documentElement;b=b.parentWindow||b.defaultView;a=B&amp;&amp;ab(\&quot;10\&quot;)&amp;&amp;b.pageYOffset!=a.scrollTop?new Ra(a.scrollLeft,a.scrollTop):new Ra(b.pageXOffset||a.scrollLeft,b.pageYOffset||a.scrollTop)}else a=new Ra(a.scrollLeft,a.scrollTop);return a}var e=Lc(a);var f=F(a),g=f.documentElement,h=f.body,r=Y(g,\&quot;overflow\&quot;),w;for(a=b(a);a;a=b(a)){var n=c(a);if(\&quot;visible\&quot;!=n.x||\&quot;visible\&quot;!=n.y){var C=Hc(a);if(!C.width||!C.height)return Z;\nvar M=e.a&lt;C.a,P=e.b&lt;C.b;if(M&amp;&amp;\&quot;hidden\&quot;==n.x||P&amp;&amp;\&quot;hidden\&quot;==n.y)return Z;if(M&amp;&amp;\&quot;visible\&quot;!=n.x||P&amp;&amp;\&quot;visible\&quot;!=n.y){M=d(a);P=e.b&lt;C.b-M.y;if(e.a&lt;C.a-M.x&amp;&amp;\&quot;visible\&quot;!=n.x||P&amp;&amp;\&quot;visible\&quot;!=n.x)return Z;e=Ic(a);return e==Z?Z:\&quot;scroll\&quot;}M=e.f&gt;=C.a+C.width;C=e.c&gt;=C.b+C.height;if(M&amp;&amp;\&quot;hidden\&quot;==n.x||C&amp;&amp;\&quot;hidden\&quot;==n.y)return Z;if(M&amp;&amp;\&quot;visible\&quot;!=n.x||C&amp;&amp;\&quot;visible\&quot;!=n.y){if(w&amp;&amp;(n=d(a),e.f&gt;=g.scrollWidth-n.x||e.a&gt;=g.scrollHeight-n.y))return Z;e=Ic(a);return e==Z?Z:\&quot;scroll\&quot;}}}return\&quot;none\&quot;}\nfunction Hc(a){var b=Jc(a);if(b)return b.rect;if(K(a,\&quot;HTML\&quot;))return a=F(a),a=((a?a.parentWindow||a.defaultView:window)||window).document,a=\&quot;CSS1Compat\&quot;==a.compatMode?a.documentElement:a.body,a=new ja(a.clientWidth,a.clientHeight),new E(0,0,a.width,a.height);try{var c=a.getBoundingClientRect()}catch(d){return new E(0,0,0,0)}b=new E(c.left,c.top,c.right-c.left,c.bottom-c.top);B&amp;&amp;a.ownerDocument.body&amp;&amp;(a=F(a),b.a-=a.documentElement.clientLeft+a.body.clientLeft,b.b-=a.documentElement.clientTop+a.body.clientTop);\nreturn b}function Jc(a){var b=K(a,\&quot;MAP\&quot;);if(!b&amp;&amp;!K(a,\&quot;AREA\&quot;))return null;var c=b?a:K(a.parentNode,\&quot;MAP\&quot;)?a.parentNode:null,d=null,e=null;c&amp;&amp;c.name&amp;&amp;(d=Cc(&#x27;/descendant::*[@usemap = \&quot;#&#x27;+c.name+&#x27;\&quot;]&#x27;,F(c)))&amp;&amp;(e=Hc(d),b||\&quot;default\&quot;==a.shape.toLowerCase()||(a=Mc(a),b=Math.min(Math.max(a.a,0),e.width),c=Math.min(Math.max(a.b,0),e.height),e=new E(b+e.a,c+e.b,Math.min(a.width,e.width-b),Math.min(a.height,e.height-c))));return{B:d,rect:e||new E(0,0,0,0)}}\nfunction Mc(a){var b=a.shape.toLowerCase();a=a.coords.split(\&quot;,\&quot;);if(\&quot;rect\&quot;==b&amp;&amp;4==a.length){var b=a[0],c=a[1];return new E(b,c,a[2]-b,a[3]-c)}if(\&quot;circle\&quot;==b&amp;&amp;3==a.length)return b=a[2],new E(a[0]-b,a[1]-b,2*b,2*b);if(\&quot;poly\&quot;==b&amp;&amp;2&lt;a.length){for(var b=a[0],c=a[1],d=b,e=c,f=2;f+1&lt;a.length;f+=2)b=Math.min(b,a[f]),d=Math.max(d,a[f]),c=Math.min(c,a[f+1]),e=Math.max(e,a[f+1]);return new E(b,c,d-b,e-c)}return new E(0,0,0,0)}function Lc(a){a=Hc(a);return new db(a.b,a.a+a.width,a.b+a.height,a.a)}\nfunction Kc(a){if(qb){if(\&quot;relative\&quot;==Y(a,\&quot;position\&quot;))return 1;a=Y(a,\&quot;filter\&quot;);return(a=a.match(/^alpha\\(opacity=(\\d*)\\)/)||a.match(/^progid:DXImageTransform.Microsoft.Alpha\\(Opacity=(\\d*)\\)/))?Number(a[1])/100:1}return Nc(a)}function Nc(a){var b=1,c=Y(a,\&quot;opacity\&quot;);c&amp;&amp;(b=Number(c));(a=Ec(a))&amp;&amp;(b*=Nc(a));return b};aa(\&quot;_\&quot;,function(a,b){function c(a){if(K(a)&amp;&amp;\&quot;none\&quot;==Y(a,\&quot;display\&quot;))return!1;var b;(b=a.parentNode)&amp;&amp;b.shadowRoot&amp;&amp;void 0!==a.assignedSlot?b=a.assignedSlot?a.assignedSlot.parentNode:null:a.getDestinationInsertionPoints&amp;&amp;(a=a.getDestinationInsertionPoints(),0&lt;a.length&amp;&amp;(b=a[a.length-1]));if(Dc&amp;&amp;b instanceof ShadowRoot){if(b.host.shadowRoot!==b)return!1;b=b.host}return!b||9!=b.nodeType&amp;&amp;11!=b.nodeType?b&amp;&amp;c(b):!0}return Gc(a,!!b,c)});; return this._.apply(null,arguments);}.apply({navigator:typeof window!=&#x27;undefined&#x27;?window.navigator:null,document:typeof window!=&#x27;undefined&#x27;?window.document:null}, arguments);}\n).apply(null, arguments);&quot;, &quot;args&quot;: [{&quot;ELEMENT&quot;: &quot;612c89f2-f360-4157-b055-f75ba1e27726&quot;, &quot;element-6066-11e4-a52e-4f735466cecf&quot;: &quot;612c89f2-f360-4157-b055-f75ba1e27726&quot;}]}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/execute/sync HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/elements {&quot;using&quot;: &quot;xpath&quot;, &quot;value&quot;: &quot;//div[@itemprop=&#x27;itemListElement&#x27;]&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/elements HTTP/1.1&quot; 200 1433
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/612c89f2-f360-4157-b055-f75ba1e27726/click {&quot;id&quot;: &quot;612c89f2-f360-4157-b055-f75ba1e27726&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/612c89f2-f360-4157-b055-f75ba1e27726/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/execute/sync {&quot;script&quot;: &quot;return document.readyState;&quot;, &quot;args&quot;: []}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/execute/sync HTTP/1.1&quot; 200 20
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/execute/sync {&quot;script&quot;: &quot;window.close()&quot;, &quot;args&quot;: []}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/execute/sync HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+remote_connection.py       388 DEBUG    POST http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa/element/2a59b41b-93c4-4200-a1b3-912a11fe2c98/click {&quot;id&quot;: &quot;2a59b41b-93c4-4200-a1b3-912a11fe2c98&quot;}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;POST /session/2250a6147ec68a1737817ec16e5b49aa/element/2a59b41b-93c4-4200-a1b3-912a11fe2c98/click HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+test_booking_simple_path.py   61 TRACE    RETURN None
+test_booking_simple_path.py   63 TRACE    CALL *() **{}
+remote_connection.py       388 DEBUG    DELETE http://127.0.0.1:54129/session/2250a6147ec68a1737817ec16e5b49aa {}
+connectionpool.py          396 DEBUG    http://127.0.0.1:54129 &quot;DELETE /session/2250a6147ec68a1737817ec16e5b49aa HTTP/1.1&quot; 200 14
+remote_connection.py       440 DEBUG    Finished Request
+test_booking_simple_path.py   65 TRACE    RETURN None<br/></div></td></tr></tbody></table></body></html>
